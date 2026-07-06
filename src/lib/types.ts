@@ -1,0 +1,117 @@
+export type ResolvedInput =
+  | { type: "url"; url: string }
+  | { type: "name_city"; name: string; city: string };
+
+export interface HoursCompleteness {
+  hasHours: boolean;
+  daysWithHours: number;
+  totalDays: 7;
+  openNow: boolean | null;
+}
+
+export interface BusinessProfile {
+  placeId: string;
+  name: string;
+  address: string | null;
+  isTarget: boolean;
+  lat: number | null;
+  lng: number | null;
+  primaryType: string | null;
+  rating: number | null;
+  reviewCount: number | null;
+  mostRecentReviewDate: string | null;
+  photoCount: number | null;
+  photoCountIsCapped: boolean;
+  hours: HoursCompleteness | null;
+  ownerResponseRate: null;
+  website: string | null;
+  phone: string | null;
+  mapsUrl: string | null;
+}
+
+export interface WebsiteCheck {
+  requestedUrl: string;
+  finalUrl: string | null;
+  reachable: boolean;
+  ssl: boolean;
+  pageSpeedScoreMobile: number | null;
+  pageSpeedScoreDesktop: number | null;
+  mobileFriendly: boolean | null;
+  visiblePhone: string | null;
+  visibleEmail: string | null;
+  onlineOrderingDetected: boolean;
+  onlineOrderingEvidence: string | null;
+  errors: string[];
+}
+
+export interface AiVisibilityRun {
+  prompt: string;
+  run: number;
+  response: string;
+  mentionedBusinesses: string[];
+}
+
+export interface AiVisibilityResult {
+  model: string;
+  prompts: string[];
+  runsPerPrompt: number;
+  raw: AiVisibilityRun[];
+  mentionCounts: Record<string, number>;
+  totalRuns: number;
+  errors: string[];
+}
+
+export interface CollectedData {
+  input: ResolvedInput;
+  target: BusinessProfile;
+  competitors: BusinessProfile[];
+  website: WebsiteCheck | null;
+  aiVisibility: AiVisibilityResult;
+  collectedAt: string;
+  warnings: string[];
+}
+
+export interface ComparisonRow {
+  metric: string;
+  values: string[];
+}
+
+export interface ReportGap {
+  rank: number;
+  title: string;
+  impact: "high" | "medium" | "low";
+  effort: "low" | "medium" | "high";
+  evidence: string;
+  steps: string[];
+}
+
+export interface AuditReport {
+  generatedAt: string;
+  businessName: string;
+  city: string | null;
+  comparison: {
+    businesses: string[];
+    rows: ComparisonRow[];
+  };
+  gaps: ReportGap[];
+  notes: string[];
+}
+
+export type ReportStatus =
+  | "pending"
+  | "resolving"
+  | "collecting"
+  | "synthesizing"
+  | "complete"
+  | "error";
+
+export interface ReportRecord {
+  slug: string;
+  status: ReportStatus;
+  input: ResolvedInput;
+  collected: CollectedData | null;
+  report: AuditReport | null;
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
