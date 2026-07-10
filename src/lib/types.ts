@@ -41,7 +41,41 @@ export interface WebsiteCheck {
   visibleEmail: string | null;
   onlineOrderingDetected: boolean;
   onlineOrderingEvidence: string | null;
+  visibleDeliveryFee: string | null;
   errors: string[];
+}
+
+export type WalkStepName =
+  | "homepage"
+  | "found_shop_entry"
+  | "product_page"
+  | "added_to_cart"
+  | "viewed_cart"
+  | "reached_checkout"
+  | "guest_checkout_available"
+  | "account_required"
+  | "reached_payment_stage";
+
+export interface CheckoutWalkStep {
+  step: WalkStepName;
+  success: boolean;
+  detail: string;
+}
+
+export interface DeviceWalkResult {
+  device: "mobile" | "desktop";
+  steps: CheckoutWalkStep[];
+  furthestStep: WalkStepName | null;
+  friction: string[];
+  error: string | null;
+}
+
+export interface SiteWalkResult {
+  attempted: boolean;
+  mobile: DeviceWalkResult | null;
+  desktop: DeviceWalkResult | null;
+  onlineOrderingConfirmed: boolean;
+  notes: string[];
 }
 
 export interface AiVisibilityRun {
@@ -66,6 +100,8 @@ export interface CollectedData {
   target: BusinessProfile;
   competitors: BusinessProfile[];
   website: WebsiteCheck | null;
+  siteWalk: SiteWalkResult | null;
+  competitorWebsites: Array<{ placeId: string; name: string; website: WebsiteCheck | null }>;
   aiVisibility: AiVisibilityResult;
   collectedAt: string;
   warnings: string[];

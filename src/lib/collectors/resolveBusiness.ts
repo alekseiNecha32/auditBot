@@ -1,5 +1,7 @@
 import * as cheerio from "cheerio";
 import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
+import { classifyInput } from "@/lib/classifyInput";
+import { domainOf } from "@/lib/domain";
 import { getPlaceDetails, textSearchPlaces } from "@/lib/collectors/places";
 import type { BusinessProfile, ResolvedInput } from "@/lib/types";
 
@@ -77,14 +79,6 @@ function extractCandidateFromHtml(html: string): { name: string | null; city: st
   return { name: name?.trim() || null, city };
 }
 
-function domainOf(url: string): string | null {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "").toLowerCase();
-  } catch {
-    return null;
-  }
-}
-
 export interface ResolveResult {
   input: ResolvedInput;
   target: BusinessProfile;
@@ -96,18 +90,16 @@ export interface ResolveResult {
 export async function resolveBusiness(rawInput: string): Promise<ResolveResult> {
   const warnings: string[] = [];
   const trimmed = rawInput.trim();
-  const looksLikeUrl = /^https?:\/\//i.test(trimmed) || /^[\w-]+\.[a-z]{2,}(\/|$)/i.test(trimmed);
+  const resolvedInput: ResolvedInput = classifyInput(trimmed);
 
   let candidateName: string | null = null;
   let candidateCity: string | null = null;
   let homepageHtml: string | null = null;
   let homepageFinalUrl: string | null = null;
-  let resolvedInput: ResolvedInput;
   let inputUrl: string | null = null;
 
-  if (looksLikeUrl) {
-    inputUrl = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-    resolvedInput = { type: "url", url: inputUrl };
+  if (resolvedInput.type === "url") {
+    inputUrl = resolvedInput.url;
     const fetched = await fetchHomepage(inputUrl);
     homepageFinalUrl = fetched.finalUrl;
     if (fetched.html) {
@@ -126,10 +118,8 @@ export async function resolveBusiness(rawInput: string): Promise<ResolveResult> 
       warnings.push("Couldn't determine the business's city from the website; competitor search may be less accurate.");
     }
   } else {
-    const [name, city] = trimmed.split(",").map((s) => s.trim());
-    candidateName = name || trimmed;
-    candidateCity = city || null;
-    resolvedInput = { type: "name_city", name: candidateName, city: candidateCity ?? "" };
+    candidateName = resolvedInput.name;
+    candidateCity = resolvedInput.city || null;
     if (!candidateCity) {
       warnings.push("No city was provided; search results may be less precise.");
     }
