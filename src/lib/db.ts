@@ -1,12 +1,35 @@
-import { neon } from "@neondatabase/serverless";
+import { Pool } from "pg";
 import { nanoid } from "nanoid";
 import { env } from "@/lib/env";
 import type { AuditReport, CollectedData, ReportRecord, ReportStatus, ResolvedInput } from "@/lib/types";
 
 let initialized = false;
+let pool: Pool | null = null;
 
+function getPool(): Pool {
+  if (!pool) {
+    pool = new Pool({
+      connectionString: env.DATABASE_URL,
+      ssl: env.DATABASE_URL.includes("localhost") ? false : { rejectUnauthorized: false },
+    });
+  }
+  return pool;
+}
+
+type Row = Record<string, unknown>;
+
+// A minimal tagged-template wrapper around pg.Pool so call sites keep the same
+// `` await db`SELECT ... WHERE x = ${value}` `` ergonomics regardless of which
+// underlying driver/provider (Render Postgres, Neon, etc.) DATABASE_URL points to.
 function sql() {
-  return neon(env.DATABASE_URL);
+  return async (strings: TemplateStringsArray, ...values: unknown[]): Promise<Row[]> => {
+    let text = strings[0];
+    for (let i = 0; i < values.length; i++) {
+      text += `$${i + 1}${strings[i + 1]}`;
+    }
+    const result = await getPool().query(text, values);
+    return result.rows;
+  };
 }
 
 async function ensureSchema() {

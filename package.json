@@ -9,14 +9,14 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@neondatabase/serverless": "^1.1.0",
     "@react-pdf/renderer": "^4.5.1",
     "@sparticuz/chromium": "^147.0.0",
-    "@vercel/functions": "^3.7.5",
     "cheerio": "^1.2.0",
     "nanoid": "^5.1.16",
     "next": "16.2.10",
     "openai": "^6.45.0",
+    "pg": "^8.22.0",
+    "playwright": "^1.61.1",
     "playwright-core": "^1.61.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -25,11 +25,11 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
-    "playwright": "^1.61.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
