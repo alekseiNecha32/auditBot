@@ -35,7 +35,9 @@ async function getPageSpeedScore(url: string, strategy: "mobile" | "desktop"): P
     endpoint.searchParams.set("category", "performance");
     if (env.PAGESPEED_API_KEY) endpoint.searchParams.set("key", env.PAGESPEED_API_KEY);
 
-    const res = await fetchWithTimeout(endpoint.toString(), {}, 25000);
+    // Real Lighthouse audits routinely take well past 25s; give this real headroom
+    // rather than reporting a false "couldn't verify" from our own timeout.
+    const res = await fetchWithTimeout(endpoint.toString(), {}, 55000);
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       return { score: null, viewportOk: null, error: `PageSpeed API ${res.status}: ${body.slice(0, 200)}` };
