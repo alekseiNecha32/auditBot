@@ -33,6 +33,37 @@ function findMentions(response: string, businessNames: string[]): string[] {
   });
 }
 
+// Heuristic extraction of business-sounding names the model mentioned that
+// aren't in our tracked competitor list — e.g. it named a business outside
+// our search radius, or one from stale training data. Not authoritative:
+// quote-matching and capitalized-phrase matching both produce false
+// positives, but it's more honest than silently discarding these mentions.
+const QUOTED_NAME_REGEX = /"([A-Z][^"]{2,59})"/g;
+// Optional leading lowercase article ("the "/"a ") is dropped from the
+// captured group — only the capitalized core (e.g. "Flower Lady") is kept —
+// since the model doesn't reliably capitalize a business name mid-sentence.
+const CAPITALIZED_FLORIST_NAME_REGEX =
+  /\b(?:the\s+|a\s+)?([A-Z][a-zA-Z'&]*(?:\s+(?:[A-Z][a-zA-Z'&]*|and|the|of))*\s+(?:Flowers?|Florists?|Floral(?:s)?|Blooms?|Petals?|Gardens?|Bouquets?))\b/g;
+
+function extractOtherBusinessNames(response: string, knownNames: string[]): string[] {
+  const known = new Set(knownNames.map(normalize).filter(Boolean));
+  const found = new Set<string>();
+
+  for (const match of response.matchAll(QUOTED_NAME_REGEX)) {
+    const candidate = match[1].trim();
+    if (candidate && !known.has(normalize(candidate))) found.add(candidate);
+  }
+  for (const match of response.matchAll(CAPITALIZED_FLORIST_NAME_REGEX)) {
+    const candidate = match[1].trim().replace(/\s+/g, " ");
+    if (candidate && !known.has(normalize(candidate))) found.add(candidate);
+  }
+
+  // Drop any candidate that's a strict substring of a longer candidate
+  // (e.g. "Cincinnati Flower" is subsumed by "Cincinnati Flower Shop").
+  const all = Array.from(found);
+  return all.filter((candidate) => !all.some((other) => other !== candidate && other.includes(candidate)));
+}
+
 async function withConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length);
   let cursor = 0;
@@ -99,14 +130,19 @@ export async function runAiVisibility(
       run,
       response,
       mentionedBusinesses: text ? findMentions(response, businessNames) : [],
+      otherMentionedBusinesses: text ? extractOtherBusinessNames(response, businessNames) : [],
     };
   });
 
   const mentionCounts: Record<string, number> = {};
   for (const name of businessNames) mentionCounts[name] = 0;
+  const otherMentionsSummary: Record<string, number> = {};
   for (const r of raw) {
     for (const name of r.mentionedBusinesses) {
       mentionCounts[name] = (mentionCounts[name] ?? 0) + 1;
+    }
+    for (const name of r.otherMentionedBusinesses) {
+      otherMentionsSummary[name] = (otherMentionsSummary[name] ?? 0) + 1;
     }
   }
 
@@ -116,6 +152,7 @@ export async function runAiVisibility(
     runsPerPrompt: RUNS_PER_PROMPT,
     raw,
     mentionCounts,
+    otherMentionsSummary,
     totalRuns: jobs.length,
     errors,
   };

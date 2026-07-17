@@ -5,6 +5,27 @@ import type { OnPageSeoSignals, WebsiteCheck } from "@/lib/types";
 
 const LOCAL_BUSINESS_TYPES = new Set(["LocalBusiness", "FloristShop", "Store", "Organization"]);
 
+// Phrases that matter for a florist's on-page SEO specifically — not a
+// generic SEO checklist. Matched case-insensitively against title + meta
+// description + first H1 combined.
+const FLORIST_KEYWORDS = [
+  "same day delivery",
+  "same-day delivery",
+  "wedding florist",
+  "wedding flowers",
+  "sympathy flowers",
+  "funeral flowers",
+  "flower delivery",
+  "local florist",
+  "florist near me",
+  "flower subscription",
+  "flower arrangements",
+  "fresh flowers",
+  "flower shop",
+  "floral design",
+  "custom arrangements",
+];
+
 function extractSeoSignals($: cheerio.CheerioAPI): OnPageSeoSignals {
   const title = $("title").first().text().trim() || null;
   const metaDescription = $('meta[name="description"]').attr("content")?.trim() || null;
@@ -26,6 +47,9 @@ function extractSeoSignals($: cheerio.CheerioAPI): OnPageSeoSignals {
     }
   });
 
+  const combinedText = [title, metaDescription, h1Text].filter(Boolean).join(" ").toLowerCase();
+  const matchedFloristKeywords = FLORIST_KEYWORDS.filter((kw) => combinedText.includes(kw));
+
   return {
     title,
     titleLength: title?.length ?? null,
@@ -34,6 +58,7 @@ function extractSeoSignals($: cheerio.CheerioAPI): OnPageSeoSignals {
     h1Count,
     h1Text,
     hasLocalBusinessStructuredData,
+    matchedFloristKeywords,
   };
 }
 
@@ -122,6 +147,7 @@ export async function checkWebsite(url: string, prefetchedHtml: string | null): 
     h1Count: 0,
     h1Text: null,
     hasLocalBusinessStructuredData: false,
+    matchedFloristKeywords: [],
   };
 
   if (html) {

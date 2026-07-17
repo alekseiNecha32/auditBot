@@ -54,6 +54,7 @@ export interface OnPageSeoSignals {
   h1Count: number;
   h1Text: string | null;
   hasLocalBusinessStructuredData: boolean;
+  matchedFloristKeywords: string[];
 }
 
 export type WalkStepName =
@@ -94,6 +95,7 @@ export interface AiVisibilityRun {
   run: number;
   response: string;
   mentionedBusinesses: string[];
+  otherMentionedBusinesses: string[];
 }
 
 export interface AiVisibilityResult {
@@ -102,6 +104,9 @@ export interface AiVisibilityResult {
   runsPerPrompt: number;
   raw: AiVisibilityRun[];
   mentionCounts: Record<string, number>;
+  // Business-sounding names the AI mentioned that aren't in our tracked
+  // competitor list — heuristically extracted, may include false positives.
+  otherMentionsSummary: Record<string, number>;
   totalRuns: number;
   errors: string[];
 }
