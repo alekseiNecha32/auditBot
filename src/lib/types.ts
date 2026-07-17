@@ -42,7 +42,18 @@ export interface WebsiteCheck {
   onlineOrderingDetected: boolean;
   onlineOrderingEvidence: string | null;
   visibleDeliveryFee: string | null;
+  seo: OnPageSeoSignals;
   errors: string[];
+}
+
+export interface OnPageSeoSignals {
+  title: string | null;
+  titleLength: number | null;
+  metaDescription: string | null;
+  metaDescriptionLength: number | null;
+  h1Count: number;
+  h1Text: string | null;
+  hasLocalBusinessStructuredData: boolean;
 }
 
 export type WalkStepName =

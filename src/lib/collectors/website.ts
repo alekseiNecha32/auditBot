@@ -1,7 +1,41 @@
 import * as cheerio from "cheerio";
 import { env } from "@/lib/env";
 import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
-import type { WebsiteCheck } from "@/lib/types";
+import type { OnPageSeoSignals, WebsiteCheck } from "@/lib/types";
+
+const LOCAL_BUSINESS_TYPES = new Set(["LocalBusiness", "FloristShop", "Store", "Organization"]);
+
+function extractSeoSignals($: cheerio.CheerioAPI): OnPageSeoSignals {
+  const title = $("title").first().text().trim() || null;
+  const metaDescription = $('meta[name="description"]').attr("content")?.trim() || null;
+  const h1s = $("h1");
+  const h1Count = h1s.length;
+  const h1Text = h1Count > 0 ? h1s.first().text().trim() || null : null;
+
+  let hasLocalBusinessStructuredData = false;
+  $('script[type="application/ld+json"]').each((_, el) => {
+    if (hasLocalBusinessStructuredData) return;
+    try {
+      const parsed = JSON.parse($(el).contents().text());
+      const nodes = Array.isArray(parsed) ? parsed : [parsed];
+      if (nodes.some((n) => LOCAL_BUSINESS_TYPES.has(n?.["@type"]))) {
+        hasLocalBusinessStructuredData = true;
+      }
+    } catch {
+      // ignore malformed JSON-LD
+    }
+  });
+
+  return {
+    title,
+    titleLength: title?.length ?? null,
+    metaDescription,
+    metaDescriptionLength: metaDescription?.length ?? null,
+    h1Count,
+    h1Text,
+    hasLocalBusinessStructuredData,
+  };
+}
 
 const ORDERING_KEYWORDS = ["order online", "order now", "shop now", "buy flowers", "start an order"];
 const ORDERING_DOMAINS = [
@@ -80,11 +114,21 @@ export async function checkWebsite(url: string, prefetchedHtml: string | null): 
   let onlineOrderingDetected = false;
   let onlineOrderingEvidence: string | null = null;
   let visibleDeliveryFee: string | null = null;
+  let seo: OnPageSeoSignals = {
+    title: null,
+    titleLength: null,
+    metaDescription: null,
+    metaDescriptionLength: null,
+    h1Count: 0,
+    h1Text: null,
+    hasLocalBusinessStructuredData: false,
+  };
 
   if (html) {
     const $ = cheerio.load(html);
     const bodyText = $("body").text().replace(/\s+/g, " ");
 
+    seo = extractSeoSignals($);
     visibleDeliveryFee = bodyText.match(DELIVERY_FEE_REGEX)?.[0]?.trim() ?? null;
 
     const telHref = $('a[href^="tel:"]').first().attr("href");
@@ -127,6 +171,7 @@ export async function checkWebsite(url: string, prefetchedHtml: string | null): 
     mobileFriendly: mobile.viewportOk,
     visiblePhone,
     visibleEmail,
+    seo,
     onlineOrderingDetected,
     onlineOrderingEvidence,
     visibleDeliveryFee,

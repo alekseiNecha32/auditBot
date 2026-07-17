@@ -91,7 +91,12 @@ export async function createReport(
 }
 
 const RATE_LIMIT_PER_HOUR = 5;
-const CACHE_HOURS = 24;
+// Only dedupes genuinely in-flight runs (stops a double-click from starting two
+// parallel pipelines for the same input) — a completed/errored report is never
+// reused, so every submission always gets a fresh run. If something is still
+// non-terminal after this long it's stuck/crashed, not "still running", so we
+// stop matching it and let a fresh attempt start.
+const DEDUP_WINDOW_HOURS = 1;
 
 export async function countRecentReportsByIp(ip: string, hours = 1): Promise<number> {
   await ensureSchema();
@@ -114,8 +119,8 @@ export async function findRecentReportByInput(normalizedInput: string): Promise<
   const rows = await db`
     SELECT * FROM reports
     WHERE normalized_input = ${normalizedInput}
-      AND status IN ('complete', 'pending', 'resolving', 'collecting', 'synthesizing')
-      AND created_at > now() - (${CACHE_HOURS} * interval '1 hour')
+      AND status IN ('pending', 'resolving', 'collecting', 'synthesizing')
+      AND created_at > now() - (${DEDUP_WINDOW_HOURS} * interval '1 hour')
     ORDER BY created_at DESC
     LIMIT 1
   `;

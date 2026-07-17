@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { AuditReport, CollectedData } from "@/lib/types";
 
 function ImpactBadge({ level }: { level: "high" | "medium" | "low" }) {
@@ -52,6 +53,12 @@ export function ReportView({
             >
               Copy shareable link
             </button>
+            <Link
+              href="/"
+              className="text-sm rounded-md border border-neutral-300 dark:border-neutral-700 px-3 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+            >
+              Start a new audit
+            </Link>
           </div>
         </header>
 
