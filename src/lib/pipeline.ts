@@ -3,8 +3,11 @@ import { findCompetitors } from "@/lib/collectors/places";
 import { checkWebsite } from "@/lib/collectors/website";
 import { runSiteWalk } from "@/lib/collectors/siteWalk";
 import { runAiVisibility } from "@/lib/collectors/aiVisibility";
+import { assessPhotoQuality } from "@/lib/collectors/photoQuality";
+import { searchBrandedName } from "@/lib/collectors/brandedSearch";
 import { synthesizeReport } from "@/lib/synthesizer";
 import { completeReport, failReport, updateReportCollected, updateReportStatus } from "@/lib/db";
+import { env } from "@/lib/env";
 import type { CollectedData } from "@/lib/types";
 
 const FLOWER_CATEGORY = "flower";
@@ -47,13 +50,22 @@ export async function runAuditPipeline(
       targetWebsiteUrl && ownsWebsite ? runSiteWalk(targetWebsiteUrl) : Promise.resolve(null),
     ]);
 
-    const competitorWebsites = await Promise.all(
-      competitors.map(async (c) => ({
-        placeId: c.placeId,
-        name: c.name,
-        website: c.website ? await checkWebsite(c.website, null) : null,
-      }))
-    );
+    const [competitorWebsites, photoQuality] = await Promise.all([
+      Promise.all(
+        competitors.map(async (c) => ({
+          placeId: c.placeId,
+          name: c.name,
+          website: c.website ? await checkWebsite(c.website, null) : null,
+        }))
+      ),
+      Promise.all(
+        [resolved.target, ...competitors].map(async (b) => ({
+          placeId: b.placeId,
+          name: b.name,
+          assessment: await assessPhotoQuality(b).catch(() => null),
+        }))
+      ),
+    ]);
 
     const city =
       resolved.input.type === "name_city" && resolved.input.city
@@ -61,8 +73,23 @@ export async function runAuditPipeline(
         : guessCityFromAddress(resolved.target.address);
     if (!city) warnings.push("Couldn't determine the business's city; AI-visibility prompts used a generic 'the area' phrasing instead.");
 
+    if (!env.GOOGLE_CSE_ID) {
+      warnings.push("Branded name-search check skipped: Custom Search API isn't configured (set GOOGLE_CSE_ID).");
+    }
+
     const businessNames = [resolved.target.name, ...competitors.map((c) => c.name)];
-    const aiVisibility = await runAiVisibility(FLOWER_CATEGORY, city ?? "", businessNames);
+    const [aiVisibility, brandedSearch] = await Promise.all([
+      runAiVisibility(FLOWER_CATEGORY, city ?? "", businessNames),
+      env.GOOGLE_CSE_ID
+        ? Promise.all(
+            [resolved.target, ...competitors].map(async (b) => ({
+              placeId: b.placeId,
+              name: b.name,
+              result: await searchBrandedName(b.name, city, b.website).catch(() => null),
+            }))
+          )
+        : Promise.resolve([]),
+    ]);
 
     const collected: CollectedData = {
       input: resolved.input,
@@ -71,6 +98,8 @@ export async function runAuditPipeline(
       website,
       siteWalk,
       competitorWebsites,
+      photoQuality,
+      brandedSearch,
       aiVisibility,
       collectedAt: new Date().toISOString(),
       warnings,

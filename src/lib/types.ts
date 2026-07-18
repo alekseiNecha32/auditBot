@@ -22,6 +22,7 @@ export interface BusinessProfile {
   mostRecentReviewDate: string | null;
   photoCount: number | null;
   photoCountIsCapped: boolean;
+  photoNames: string[];
   hours: HoursCompleteness | null;
   ownerResponseRate: null;
   website: string | null;
@@ -111,6 +112,21 @@ export interface AiVisibilityResult {
   errors: string[];
 }
 
+export interface BrandedSearchResult {
+  ranksFirst: boolean | null;
+  topResults: Array<{ title: string; link: string; snippet: string }>;
+  error: string | null;
+}
+
+export interface PhotoQualityAssessment {
+  photosAssessed: number;
+  sharpnessAndLighting: "good" | "fair" | "poor" | null;
+  styleConsistency: "consistent" | "inconsistent" | null;
+  arrangementScaleClear: boolean | null;
+  summary: string | null;
+  error: string | null;
+}
+
 export interface CollectedData {
   input: ResolvedInput;
   target: BusinessProfile;
@@ -118,6 +134,8 @@ export interface CollectedData {
   website: WebsiteCheck | null;
   siteWalk: SiteWalkResult | null;
   competitorWebsites: Array<{ placeId: string; name: string; website: WebsiteCheck | null }>;
+  photoQuality: Array<{ placeId: string; name: string; assessment: PhotoQualityAssessment | null }>;
+  brandedSearch: Array<{ placeId: string; name: string; result: BrandedSearchResult | null }>;
   aiVisibility: AiVisibilityResult;
   collectedAt: string;
   warnings: string[];

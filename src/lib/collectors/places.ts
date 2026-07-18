@@ -43,7 +43,7 @@ interface RawPlace {
   nationalPhoneNumber?: string;
   googleMapsUri?: string;
   reviews?: Array<{ publishTime?: string }>;
-  photos?: Array<unknown>;
+  photos?: Array<{ name?: string }>;
   regularOpeningHours?: { periods?: Array<{ open?: { day?: number } }> };
 }
 
@@ -129,6 +129,7 @@ function toBusinessProfile(place: RawPlace, isTarget: boolean): BusinessProfile 
     .filter((d): d is string => Boolean(d))
     .sort();
   const photoCount = place.photos?.length ?? null;
+  const photoNames = (place.photos ?? []).map((p) => p.name).filter((n): n is string => Boolean(n));
 
   return {
     placeId: place.id,
@@ -145,6 +146,7 @@ function toBusinessProfile(place: RawPlace, isTarget: boolean): BusinessProfile 
     // up to 10), so this is a floor on the true photo count, not an exact total.
     photoCount,
     photoCountIsCapped: photoCount !== null && photoCount >= 10,
+    photoNames,
     hours: computeHoursCompleteness(place),
     // Owner reply text/date is not exposed by the Places API's public review
     // object, so this can never be computed from this data source.
@@ -153,6 +155,22 @@ function toBusinessProfile(place: RawPlace, isTarget: boolean): BusinessProfile 
     phone: place.nationalPhoneNumber ?? null,
     mapsUrl: place.googleMapsUri ?? null,
   };
+}
+
+// Resolves a Places photo resource name to a short-lived, Google-CDN-hosted
+// image URL that does NOT contain our API key — safe to hand to a third
+// party (e.g. OpenAI's vision API), unlike the raw media endpoint URL, which
+// requires our key in the query string and must never leave our server.
+export async function getPhotoUri(photoName: string, maxWidthPx = 400): Promise<string | null> {
+  try {
+    const url = `${PLACES_BASE}/${photoName}/media?maxWidthPx=${maxWidthPx}&skipHttpRedirect=true&key=${env.GOOGLE_PLACES_API_KEY}`;
+    const res = await fetchWithTimeout(url, { method: "GET" }, 10000);
+    if (!res.ok) return null;
+    const data = (await res.json()) as { photoUri?: string };
+    return data.photoUri ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function getPlaceDetails(placeId: string, isTarget: boolean): Promise<BusinessProfile> {

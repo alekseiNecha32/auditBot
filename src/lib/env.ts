@@ -27,4 +27,13 @@ export const env = {
   get SYNTHESIS_MODEL() {
     return process.env.SYNTHESIS_MODEL || "gpt-4o";
   },
+  get PHOTO_QUALITY_MODEL() {
+    return process.env.PHOTO_QUALITY_MODEL || "gpt-4o-mini";
+  },
+  get GOOGLE_CSE_ID() {
+    // Optional: enables the branded-name-search check. Empty string means
+    // "not configured" — the collector treats that as a clean skip, not an
+    // error, since this feature is opt-in.
+    return process.env.GOOGLE_CSE_ID || "";
+  },
 };
