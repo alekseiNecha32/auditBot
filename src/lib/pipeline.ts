@@ -1,6 +1,6 @@
 import { resolveBusiness } from "@/lib/collectors/resolveBusiness";
 import { findCompetitors } from "@/lib/collectors/places";
-import { checkWebsite } from "@/lib/collectors/website";
+import { checkWebsite, computeTopMissingKeywords } from "@/lib/collectors/website";
 import { runSiteWalk } from "@/lib/collectors/siteWalk";
 import { runAiVisibility } from "@/lib/collectors/aiVisibility";
 import { assessPhotoQuality } from "@/lib/collectors/photoQuality";
@@ -67,6 +67,8 @@ export async function runAuditPipeline(
       ),
     ]);
 
+    const topMissingKeywords = computeTopMissingKeywords(website, competitorWebsites);
+
     const city =
       resolved.input.type === "name_city" && resolved.input.city
         ? resolved.input.city
@@ -100,6 +102,7 @@ export async function runAuditPipeline(
       competitorWebsites,
       photoQuality,
       brandedSearch,
+      topMissingKeywords,
       aiVisibility,
       collectedAt: new Date().toISOString(),
       warnings,

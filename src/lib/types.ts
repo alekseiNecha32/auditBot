@@ -58,6 +58,12 @@ export interface OnPageSeoSignals {
   matchedFloristKeywords: string[];
 }
 
+export interface MissingKeyword {
+  keyword: string;
+  competitorsUsingIt: number;
+  totalCompetitorsWithData: number;
+}
+
 export type WalkStepName =
   | "homepage"
   | "found_shop_entry"
@@ -136,6 +142,9 @@ export interface CollectedData {
   competitorWebsites: Array<{ placeId: string; name: string; website: WebsiteCheck | null }>;
   photoQuality: Array<{ placeId: string; name: string; assessment: PhotoQualityAssessment | null }>;
   brandedSearch: Array<{ placeId: string; name: string; result: BrandedSearchResult | null }>;
+  // Deterministically computed (not LLM-guessed): the target's top missing
+  // florist keywords, ranked by how many competitors actually use them.
+  topMissingKeywords: MissingKeyword[];
   aiVisibility: AiVisibilityResult;
   collectedAt: string;
   warnings: string[];

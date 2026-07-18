@@ -1,7 +1,7 @@
 import * as cheerio from "cheerio";
 import { env } from "@/lib/env";
 import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
-import type { OnPageSeoSignals, WebsiteCheck } from "@/lib/types";
+import type { MissingKeyword, OnPageSeoSignals, WebsiteCheck } from "@/lib/types";
 
 const LOCAL_BUSINESS_TYPES = new Set(["LocalBusiness", "FloristShop", "Store", "Organization"]);
 
@@ -60,6 +60,37 @@ function extractSeoSignals($: cheerio.CheerioAPI): OnPageSeoSignals {
     hasLocalBusinessStructuredData,
     matchedFloristKeywords,
   };
+}
+
+// Deterministic, not LLM-judged: ranks florist keywords by how many
+// competitors actually use them, then returns the ones the target is
+// missing, most-used-by-competitors first. Guarantees the report can always
+// surface a concrete "add these keywords" list instead of depending on the
+// synthesizer to notice and phrase one from the raw per-business lists.
+export function computeTopMissingKeywords(
+  target: WebsiteCheck | null,
+  competitorWebsites: Array<{ website: WebsiteCheck | null }>,
+  limit = 5
+): MissingKeyword[] {
+  const targetKeywords = new Set(target?.seo.matchedFloristKeywords ?? []);
+  const competitorsWithData = competitorWebsites.filter((c) => c.website !== null);
+
+  const counts = new Map<string, number>();
+  for (const c of competitorsWithData) {
+    for (const kw of c.website!.seo.matchedFloristKeywords) {
+      counts.set(kw, (counts.get(kw) ?? 0) + 1);
+    }
+  }
+
+  return Array.from(counts.entries())
+    .filter(([kw]) => !targetKeywords.has(kw))
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([keyword, competitorsUsingIt]) => ({
+      keyword,
+      competitorsUsingIt,
+      totalCompetitorsWithData: competitorsWithData.length,
+    }));
 }
 
 const ORDERING_KEYWORDS = ["order online", "order now", "shop now", "buy flowers", "start an order"];
