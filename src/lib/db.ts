@@ -60,6 +60,13 @@ async function ensureSchema() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
+  await db`
+    CREATE TABLE IF NOT EXISTS chat_events (
+      requester_ip TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  await db`CREATE INDEX IF NOT EXISTS chat_events_ip_idx ON chat_events (requester_ip, created_at DESC)`;
   initialized = true;
 }
 
@@ -220,4 +227,21 @@ export async function isDomainVerified(domain: string): Promise<boolean> {
   const db = sql();
   const rows = await db`SELECT verified FROM domain_verifications WHERE domain = ${domain}`;
   return rows.length > 0 && (rows[0].verified as boolean);
+}
+
+const CHAT_RATE_LIMIT_PER_HOUR = 30;
+
+export async function isChatRateLimited(ip: string): Promise<boolean> {
+  await ensureSchema();
+  const db = sql();
+  const rows = await db`
+    SELECT COUNT(*)::int AS count FROM chat_events
+    WHERE requester_ip = ${ip} AND created_at > now() - interval '1 hour'
+  `;
+  return ((rows[0]?.count as number) ?? 0) >= CHAT_RATE_LIMIT_PER_HOUR;
+}
+
+export async function recordChatEvent(ip: string): Promise<void> {
+  const db = sql();
+  await db`INSERT INTO chat_events (requester_ip) VALUES (${ip})`;
 }

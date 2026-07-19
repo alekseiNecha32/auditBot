@@ -36,4 +36,7 @@ export const env = {
     // error, since this feature is opt-in.
     return process.env.GOOGLE_CSE_ID || "";
   },
+  get CHAT_MODEL() {
+    return process.env.CHAT_MODEL || "gpt-4o-mini";
+  },
 };

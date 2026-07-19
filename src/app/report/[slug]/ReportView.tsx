@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { AuditReport, CollectedData } from "@/lib/types";
+import { ReportChat } from "./ReportChat";
 
 function ImpactBadge({ level }: { level: "high" | "medium" | "low" }) {
   const styles: Record<string, string> = {
@@ -131,6 +132,8 @@ export function ReportView({
             </ul>
           </section>
         )}
+
+        <ReportChat slug={slug} />
 
         {collected && (
           <details className="text-sm">
