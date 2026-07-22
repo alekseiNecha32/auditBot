@@ -95,6 +95,21 @@ export interface SiteWalkResult {
   desktop: DeviceWalkResult | null;
   onlineOrderingConfirmed: boolean;
   notes: string[];
+  productSample: ProductSample | null;
+}
+
+export interface PageScreenshot {
+  pageUrl: string;
+  label: string;
+  imageBase64: string;
+  highlightedElement: string | null;
+}
+
+export interface ProductSample {
+  url: string;
+  name: string | null;
+  description: string | null;
+  screenshot: PageScreenshot | null;
 }
 
 export interface AiVisibilityRun {
@@ -146,6 +161,8 @@ export interface CollectedData {
   // florist keywords, ranked by how many competitors actually use them.
   topMissingKeywords: MissingKeyword[];
   aiVisibility: AiVisibilityResult;
+  homepageScreenshot: PageScreenshot | null;
+  productSample: ProductSample | null;
   collectedAt: string;
   warnings: string[];
 }
@@ -162,6 +179,9 @@ export interface ReportGap {
   effort: "low" | "medium" | "high";
   evidence: string;
   steps: string[];
+  // Attached deterministically after synthesis (never produced by the LLM) —
+  // see attachGapScreenshots in pipeline.ts.
+  screenshot?: { imageBase64: string; caption: string } | null;
 }
 
 export interface AuditReport {

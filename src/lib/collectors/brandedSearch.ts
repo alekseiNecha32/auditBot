@@ -3,44 +3,48 @@ import { domainOf } from "@/lib/domain";
 import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
 import type { BrandedSearchResult } from "@/lib/types";
 
-const CSE_ENDPOINT = "https://www.googleapis.com/customsearch/v1";
+const SERPER_ENDPOINT = "https://google.serper.dev/search";
 
-interface CseItem {
+interface SerperOrganicResult {
   title?: string;
   link?: string;
   snippet?: string;
 }
 
-// Uses Google's official Custom Search JSON API — not scraping search
-// results, which would violate Google's Terms of Service. Requires the
-// caller to have set up a Programmable Search Engine (search.google.com/cse)
-// configured to search the whole web, and enabled the Custom Search API.
+// Uses serper.dev, a third-party proxy that returns real Google SERP
+// results. Google's own Custom Search JSON API stopped granting access to
+// new projects/customers in 2026 (closed ahead of its Jan 1 2027 shutdown),
+// so this talks to Serper instead while keeping the same
+// real-Google-results semantics the rest of the app relies on.
 export async function searchBrandedName(
   businessName: string,
   city: string | null,
   ownWebsite: string | null
 ): Promise<BrandedSearchResult> {
-  const cseId = env.GOOGLE_CSE_ID;
-  if (!cseId) {
-    return { ranksFirst: null, topResults: [], error: "Custom Search API not configured (GOOGLE_CSE_ID unset)." };
+  const apiKey = env.SERPER_API_KEY;
+  if (!apiKey) {
+    return { ranksFirst: null, topResults: [], error: "Branded search not configured (SERPER_API_KEY unset)." };
   }
 
   try {
     const query = [businessName, city].filter(Boolean).join(" ");
-    const url = new URL(CSE_ENDPOINT);
-    url.searchParams.set("key", env.GOOGLE_PLACES_API_KEY);
-    url.searchParams.set("cx", cseId);
-    url.searchParams.set("q", query);
-    url.searchParams.set("num", "10");
+    const res = await fetchWithTimeout(
+      SERPER_ENDPOINT,
+      {
+        method: "POST",
+        headers: { "X-API-KEY": apiKey, "Content-Type": "application/json" },
+        body: JSON.stringify({ q: query, num: 10 }),
+      },
+      10000
+    );
 
-    const res = await fetchWithTimeout(url.toString(), {}, 10000);
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      return { ranksFirst: null, topResults: [], error: `Custom Search API ${res.status}: ${body.slice(0, 200)}` };
+      return { ranksFirst: null, topResults: [], error: `Serper API ${res.status}: ${body.slice(0, 200)}` };
     }
 
-    const data = (await res.json()) as { items?: CseItem[] };
-    const topResults = (data.items ?? []).slice(0, 10).map((item) => ({
+    const data = (await res.json()) as { organic?: SerperOrganicResult[] };
+    const topResults = (data.organic ?? []).slice(0, 10).map((item) => ({
       title: item.title ?? "",
       link: item.link ?? "",
       snippet: item.snippet ?? "",

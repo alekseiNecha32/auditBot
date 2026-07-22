@@ -9,7 +9,6 @@ const LOCAL_BUSINESS_TYPES = new Set(["LocalBusiness", "FloristShop", "Store", "
 // generic SEO checklist. Matched case-insensitively against title + meta
 // description + first H1 combined.
 const FLORIST_KEYWORDS = [
-  "same day delivery",
   "same-day delivery",
   "wedding florist",
   "wedding flowers",
@@ -47,8 +46,15 @@ function extractSeoSignals($: cheerio.CheerioAPI): OnPageSeoSignals {
     }
   });
 
-  const combinedText = [title, metaDescription, h1Text].filter(Boolean).join(" ").toLowerCase();
-  const matchedFloristKeywords = FLORIST_KEYWORDS.filter((kw) => combinedText.includes(kw));
+  // Hyphens normalized to spaces on both sides so "same-day delivery" and
+  // "same day delivery" are treated as one keyword regardless of which form
+  // a given page actually uses.
+  const combinedText = [title, metaDescription, h1Text]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .replace(/-/g, " ");
+  const matchedFloristKeywords = FLORIST_KEYWORDS.filter((kw) => combinedText.includes(kw.replace(/-/g, " ")));
 
   return {
     title,

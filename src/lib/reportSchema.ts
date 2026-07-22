@@ -27,7 +27,7 @@ export const reportZodSchema = z.object({
       })
     )
     .min(1)
-    .max(5),
+    .max(7),
   notes: z.array(z.string()),
 });
 

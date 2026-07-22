@@ -117,6 +117,19 @@ export function ReportView({
                       <li key={i}>{step}</li>
                     ))}
                   </ol>
+                  {gap.screenshot && (
+                    <figure className="pt-2">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- base64 data URL, not a static asset */}
+                      <img
+                        src={gap.screenshot.imageBase64}
+                        alt={gap.screenshot.caption}
+                        className="rounded-md border border-neutral-200 dark:border-neutral-800 max-w-full"
+                      />
+                      <figcaption className="text-xs text-neutral-500 dark:text-neutral-400 pt-1">
+                        {gap.screenshot.caption}
+                      </figcaption>
+                    </figure>
+                  )}
                 </li>
               ))}
           </ol>

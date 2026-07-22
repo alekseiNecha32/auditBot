@@ -2,10 +2,12 @@ import { resolveBusiness } from "@/lib/collectors/resolveBusiness";
 import { findCompetitors } from "@/lib/collectors/places";
 import { checkWebsite, computeTopMissingKeywords } from "@/lib/collectors/website";
 import { runSiteWalk } from "@/lib/collectors/siteWalk";
+import { captureHomepageScreenshot } from "@/lib/collectors/homepageScreenshot";
 import { runAiVisibility } from "@/lib/collectors/aiVisibility";
 import { assessPhotoQuality } from "@/lib/collectors/photoQuality";
 import { searchBrandedName } from "@/lib/collectors/brandedSearch";
 import { synthesizeReport } from "@/lib/synthesizer";
+import { attachGapScreenshots } from "@/lib/reportScreenshots";
 import { completeReport, failReport, updateReportCollected, updateReportStatus } from "@/lib/db";
 import { env } from "@/lib/env";
 import type { CollectedData } from "@/lib/types";
@@ -44,10 +46,11 @@ export async function runAuditPipeline(
       );
     }
 
-    const [competitors, website, siteWalk] = await Promise.all([
+    const [competitors, website, siteWalk, homepageScreenshot] = await Promise.all([
       findCompetitors(resolved.target),
       targetWebsiteUrl ? checkWebsite(targetWebsiteUrl, resolved.homepageHtml) : Promise.resolve(null),
       targetWebsiteUrl && ownsWebsite ? runSiteWalk(targetWebsiteUrl) : Promise.resolve(null),
+      targetWebsiteUrl ? captureHomepageScreenshot(targetWebsiteUrl).catch(() => null) : Promise.resolve(null),
     ]);
 
     const [competitorWebsites, photoQuality] = await Promise.all([
@@ -75,14 +78,14 @@ export async function runAuditPipeline(
         : guessCityFromAddress(resolved.target.address);
     if (!city) warnings.push("Couldn't determine the business's city; AI-visibility prompts used a generic 'the area' phrasing instead.");
 
-    if (!env.GOOGLE_CSE_ID) {
-      warnings.push("Branded name-search check skipped: Custom Search API isn't configured (set GOOGLE_CSE_ID).");
+    if (!env.SERPER_API_KEY) {
+      warnings.push("Branded name-search check skipped: Serper isn't configured (set SERPER_API_KEY).");
     }
 
     const businessNames = [resolved.target.name, ...competitors.map((c) => c.name)];
     const [aiVisibility, brandedSearch] = await Promise.all([
       runAiVisibility(FLOWER_CATEGORY, city ?? "", businessNames),
-      env.GOOGLE_CSE_ID
+      env.SERPER_API_KEY
         ? Promise.all(
             [resolved.target, ...competitors].map(async (b) => ({
               placeId: b.placeId,
@@ -104,6 +107,8 @@ export async function runAuditPipeline(
       brandedSearch,
       topMissingKeywords,
       aiVisibility,
+      homepageScreenshot,
+      productSample: siteWalk?.productSample ?? null,
       collectedAt: new Date().toISOString(),
       warnings,
     };
@@ -112,6 +117,7 @@ export async function runAuditPipeline(
     await updateReportStatus(slug, "synthesizing");
 
     const report = await synthesizeReport(collected);
+    report.gaps = attachGapScreenshots(report.gaps, collected);
     await completeReport(slug, report);
   } catch (err) {
     await failReport(slug, err instanceof Error ? err.message : String(err));
