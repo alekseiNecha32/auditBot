@@ -17,12 +17,18 @@ const SHOP_HREF_PATTERNS = [/shop/i, /collections/i, /products/i, /catalog/i, /s
 const PRODUCT_TEXT_PATTERNS = [/view/i, /details/i, /select options/i];
 const PRODUCT_HREF_PATTERNS = [/product/i, /-p-\d/i, /\/item/i];
 
-const ADD_TO_CART_PATTERNS = [/add to cart/i, /add to bag/i, /add to basket/i, /^order now$/i, /select options/i, /buy now/i];
+// Patterns that genuinely complete an add-to-cart action in one click.
+const IMMEDIATE_ADD_PATTERNS = [/^add to cart$/i, /add to bag/i, /add to basket/i, /^order now$/i, /buy now/i];
+// Patterns that only open a variant/quick-view panel — clicking these is NOT
+// the same as adding to cart; the real add-to-cart control appears inside
+// whatever they open, and must be clicked separately.
+const OPENS_PANEL_PATTERNS = [/select options/i, /quick add/i];
 
 const CART_TEXT_PATTERNS = [/^cart$/i, /view cart/i, /^bag$/i, /^basket$/i, /shopping cart/i];
 const CART_HREF_PATTERNS = [/cart/i, /bag/i, /basket/i];
 
-const CHECKOUT_TEXT_PATTERNS = [/checkout/i, /proceed to checkout/i];
+
+const CHECKOUT_TEXT_PATTERNS = [/check[\s-]?out/i, /proceed to check[\s-]?out/i];
 const CHECKOUT_HREF_PATTERNS = [/checkout/i];
 
 const GUEST_TEXT_MARKERS = [/guest checkout/i, /checkout as (a )?guest/i, /continue as guest/i];
@@ -71,17 +77,14 @@ interface Candidate {
   text: string;
   href: string;
   visible: boolean;
+  occlusion: "clickable" | "unknown" | "occluded";
 }
 
 function msg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-// Mega-menu/dropdown triggers are often real <a> tags with a placeholder
-// href (e.g. href="#") that just toggle a hover/click flyout rather than
-// navigating anywhere — matching one of these before a genuinely distinct,
-// navigable link (e.g. "/collections/all-bouquets") sitting right next to it
-// in the DOM causes the walk to "click" and go nowhere.
+
 function isPlaceholderHref(href: string, currentUrl: string): boolean {
   if (!href || href.startsWith("javascript:")) return true;
   const withoutHash = href.replace(/#.*$/, "");
@@ -95,11 +98,25 @@ async function getCandidates(page: Page): Promise<Candidate[]> {
     return els.map((el, index) => {
       const rect = el.getBoundingClientRect();
       const anchor = el as HTMLAnchorElement;
+      const hasLayout = rect.width > 0 && rect.height > 0;
+
+      let occlusion: "clickable" | "unknown" | "occluded" = "unknown";
+      if (hasLayout) {
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        if (cx >= 0 && cy >= 0 && cx <= window.innerWidth && cy <= window.innerHeight) {
+          const top = document.elementFromPoint(cx, cy);
+          occlusion = top !== null && (top === el || el.contains(top) || top.contains(el)) ? "clickable" : "occluded";
+        }
+
+      }
+
       return {
         index,
         text: (el.textContent || "").trim().slice(0, 120),
         href: anchor.href || "",
-        visible: rect.width > 0 && rect.height > 0,
+        visible: hasLayout,
+        occlusion,
       };
     });
   });
@@ -115,26 +132,21 @@ async function clickFirstMatch(
     (c) => c.visible && (textPatterns.some((p) => p.test(c.text)) || hrefPatterns.some((p) => p.test(c.href)))
   );
   if (matches.length === 0) return { clicked: false };
-  // Prefer the first match with a genuinely distinct, navigable href over an
-  // earlier DOM-order match that's just a placeholder toggle.
   const currentUrl = page.url();
-  const match = matches.find((c) => !isPlaceholderHref(c.href, currentUrl)) ?? matches[0];
 
-  // Prefer direct navigation over a UI click when we have a real href: many
-  // storefronts nest primary nav links inside CSS :hover-only mega-menus, so
-  // by the time Playwright scrolls to/clicks the element the flyout has
-  // already closed and the element fails Playwright's actionability check
-  // even though it had real layout dimensions a moment earlier ("element is
-  // not visible"). Navigating directly reaches the same destination a
-  // successful hover+click would have, without that fragility.
-  if (!isPlaceholderHref(match.href, currentUrl)) {
+
+  const navigableMatch = matches.find((c) => !isPlaceholderHref(c.href, currentUrl));
+  if (navigableMatch) {
     try {
-      await page.goto(match.href, { waitUntil: "domcontentloaded", timeout: 15000 });
-      return { clicked: true, matchedText: match.text || match.href };
+      await page.goto(navigableMatch.href, { waitUntil: "domcontentloaded", timeout: 15000 });
+      return { clicked: true, matchedText: navigableMatch.text || navigableMatch.href };
     } catch {
       // fall through to a real click attempt below
     }
   }
+
+  // No usable href (or navigation failed) — this must be a real click.
+  const match = matches[0];
 
   try {
     const locator = page.locator("a, button").nth(match.index);
@@ -144,6 +156,39 @@ async function clickFirstMatch(
   } catch {
     return { clicked: false };
   }
+}
+
+
+async function clickMostClickableMatch(
+  page: Page,
+  textPatterns: RegExp[]
+): Promise<{ clicked: boolean; matchedText?: string }> {
+  const candidates = await getCandidates(page);
+  const matches = candidates.filter((c) => c.visible && textPatterns.some((p) => p.test(c.text)));
+  if (matches.length === 0) return { clicked: false };
+  const match =
+    matches.find((c) => c.occlusion === "clickable") ?? matches.find((c) => c.occlusion === "unknown") ?? matches[0];
+
+  try {
+    const locator = page.locator("a, button").nth(match.index);
+    await locator.scrollIntoViewIfNeeded({ timeout: 2000 });
+    await locator.click({ timeout: 4000 });
+    return { clicked: true, matchedText: match.text || match.href };
+  } catch {
+    return { clicked: false };
+  }
+}
+
+
+async function clickAddToCart(page: Page): Promise<{ clicked: boolean; matchedText?: string }> {
+  const panelOpened = await clickFirstMatch(page, OPENS_PANEL_PATTERNS);
+  if (panelOpened.clicked) {
+    await page.waitForTimeout(800);
+    const realAdd = await clickMostClickableMatch(page, IMMEDIATE_ADD_PATTERNS);
+    if (realAdd.clicked) return realAdd;
+    return { clicked: false };
+  }
+  return clickMostClickableMatch(page, IMMEDIATE_ADD_PATTERNS);
 }
 
 async function pageContainsAny(page: Page, patterns: RegExp[]): Promise<boolean> {
@@ -179,10 +224,7 @@ async function walkDevice(browser: Browser, url: string, device: "mobile" | "des
   try {
     try {
       await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
-      // Many storefronts render their real nav (mega-menus, etc.) client-side
-      // after domcontentloaded — without this, we can query for shop/product
-      // links before they exist in the DOM yet. Same rationale as the
-      // screenshot collectors' wait.
+
       await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
       record("homepage", true, `Loaded ${url}`);
     } catch (err) {
@@ -201,7 +243,7 @@ async function walkDevice(browser: Browser, url: string, device: "mobile" | "des
     await page.waitForLoadState("domcontentloaded").catch(() => {});
     await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
 
-    let addResult = await clickFirstMatch(page, ADD_TO_CART_PATTERNS);
+    let addResult = await clickAddToCart(page);
     if (addResult.clicked) {
       record("product_page", true, "Product could be added to cart directly from the catalog/listing page.");
     } else {
@@ -213,12 +255,10 @@ async function walkDevice(browser: Browser, url: string, device: "mobile" | "des
       }
       record("product_page", true, `Opened product via "${productClick.matchedText}"`);
       await page.waitForLoadState("domcontentloaded").catch(() => {});
+      await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
+      await page.waitForTimeout(500);
 
       if (device === "desktop") {
-        // Same rationale as the homepage screenshot: give client-rendered
-        // product pages a moment to finish painting before reading/capturing.
-        await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
-        await page.waitForTimeout(500);
         const { name, description } = await extractProductDescription(page).catch(() => ({
           name: null,
           description: null,
@@ -227,7 +267,7 @@ async function walkDevice(browser: Browser, url: string, device: "mobile" | "des
         productSample = { url: page.url(), name, description, screenshot };
       }
 
-      addResult = await clickFirstMatch(page, ADD_TO_CART_PATTERNS);
+      addResult = await clickAddToCart(page);
     }
 
     if (!addResult.clicked) {
